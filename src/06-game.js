@@ -2,7 +2,6 @@ import * as THREE from './utils/three'
 import * as CANNON from './utils/cannon'
 import FBXLoader from './utils/FBXLoader'
 import WebGL from 'three/examples/jsm/capabilities/WebGL'
-import CannonDebugRenderer from './utils/CannonDebugRenderer'
 
 class Game {
   constructor() {
@@ -31,9 +30,10 @@ class Game {
     this._hints = 0
     this.score = 0
     this.debug = false
-    this.debugPhysics = true
+    this.debugPhysics = false
     this.fixedTimeStep = 1.0 / 60.0
     this.js = { forward: 0, turn: 0 }
+    this.assetsPath = '/'
 
     this.messages = {
       text: ['Welcome to Skyblade.'],
@@ -59,20 +59,36 @@ class Game {
         '/ny.jpg',
         '/py.jpg',
         '/nz.jpg',
-        '/pz.jpg'
+        '/pz.jpg',
+        `/bump.${sfxExt}`,
+        `/click.${sfxExt}`,
+        `/engine.${sfxExt}`,
+        `/skid.${sfxExt}`
       ],
       oncomplete: function () {
-        game.init()
-        game.animate()
+        //game.init();
+        //game.animate();
       }
+    }
+
+    for (let i = 0; i <= 16; i++) {
+      let path
+      if (i < 10) {
+        path = `/carparts000${i}.png`
+      } else {
+        path = `/carparts00${i}.png`
+      }
+      options.assets.push(path)
     }
 
     this.mode = this.modes.PRELOAD
     this.motion = { forward: 0, turn: 0 }
     this.clock = new THREE.Clock()
 
-    //this.init();
-    //this.animate();
+    this.initSfx()
+
+    this.carGUI = [0, 0, 0, 0, 0]
+
     if ('ontouchstart' in window) {
       document
         .getElementById('reset-btn')
@@ -85,10 +101,88 @@ class Game {
       }
     }
 
+    let index = 0
+    document.getElementById('part-select').childNodes.forEach(function (node) {
+      if (node.nodeType == 1) {
+        const i = index
+        node.onclick = function () {
+          game.carGUIHandler(i)
+        }
+        index++
+      }
+    })
+
+    document.getElementById('play-btn').onclick = function () {
+      game.startGame()
+    }
+
     const preloader = new Preloader(options)
 
     window.onError = function (error) {
       console.error(JSON.stringify(error))
+    }
+  }
+
+  carGUIHandler(part) {
+    //0 - Body, 1 - Aerial, 2 - Engine, 3 - Exhaust, 4 - Wheels
+    this.sfx.click.play()
+    this.carGUI[part]++
+    if (this.carGUI[part] > 3) this.carGUI[part] = 0
+    const index = this.carGUI[part] == 0 ? 0 : this.carGUI[part] + part * 3 + 1
+    console.log(
+      document.getElementById('car-parts'),
+      document.getElementById('car-parts').childNodes,
+      part,
+      5 - part,
+      document.getElementById('car-parts').childNodes[5 - part]
+    )
+    const layer = document.getElementById('car-parts').childNodes[5 - part]
+    if (index < 10) {
+      layer.attributes.src.value = `/carparts000${index}.png`
+    } else {
+      layer.attributes.src.value = `/carparts00${index}.png`
+    }
+  }
+
+  startGame() {
+    this.sfx.click.play()
+    const parts = [
+      'a Body',
+      'an Aerial',
+      'an Engine',
+      'an Exhaust',
+      'some Wheels'
+    ]
+    let index = 0
+    let configured = true
+    this.carGUI.forEach(function (item) {
+      if (item == 0) {
+        showMessage(`Please select ${parts[index]}`)
+        configured = false
+      }
+      index++
+    })
+
+    if (!configured) {
+      this.sfx.skid.play()
+      return
+    }
+
+    //Hide the GUI
+    const gui = ['part-select', 'car-parts', 'message', 'play-btn']
+    gui.forEach(function (id) {
+      document.getElementById(id).style.display = 'none'
+    })
+
+    document.getElementById('reset-btn').style.display = 'block'
+
+    this.sfx.engine.play()
+    this.init()
+    this.animate()
+
+    function showMessage(msg) {
+      const elm = document.getElementById('message')
+      elm.innerHTML = msg
     }
   }
 
@@ -121,6 +215,7 @@ class Game {
   }
 
   resetCar() {
+    this.sfx.skid.play()
     let checkpoint
     let distance = 10000000000
     const carPos = this.vehicle.chassisBody.position
@@ -142,9 +237,39 @@ class Game {
   initSfx() {
     this.sfx = {}
     this.sfx.context = new (window.AudioContext || window.webkitAudioContext)()
+    this.sfx.bump = new SFX({
+      context: this.sfx.context,
+      src: {
+        mp3: `/bump.mp3`,
+        ogg: `/bump.ogg`
+      },
+      loop: false,
+      volume: 0.3
+    })
     this.sfx.click = new SFX({
       context: this.sfx.context,
-      src: { mp3: '/click.mp3', ogg: '/click.ogg' },
+      src: {
+        mp3: `/click.mp3`,
+        ogg: `/click.ogg`
+      },
+      loop: false,
+      volume: 0.3
+    })
+    this.sfx.engine = new SFX({
+      context: this.sfx.context,
+      src: {
+        mp3: `/engine.mp3`,
+        ogg: `/engine.ogg`
+      },
+      loop: true,
+      volume: 0.1
+    })
+    this.sfx.skid = new SFX({
+      context: this.sfx.context,
+      src: {
+        mp3: `/skid.mp3`,
+        ogg: `/skid.ogg`
+      },
       loop: false,
       volume: 0.3
     })
@@ -162,7 +287,7 @@ class Game {
     this.camera.position.set(0, 6, -15)
 
     this.scene = new THREE.Scene()
-    this.scene.background = new THREE.Color(0xa0a0a0)
+    this.scene.background = new THREE.Color(0x000000)
     //this.scene.fog = new THREE.Fog( 0xa0a0a0, 20, 100 );
 
     // LIGHTS
@@ -199,10 +324,6 @@ class Game {
     } else {
       //this.renderer.domElement.addEventListener('mousedown', function(evt){ game.tap(evt); });
     }
-
-    //this.controls = new THREE.OrbitControls( this.camera, this.renderer.domElement );
-    //this.controls.enableZoom = true;
-    //this.controls.enablePan = true;
 
     this.loadAssets()
 
@@ -241,7 +362,9 @@ class Game {
         object.traverse(function (child) {
           let receiveShadow = true
           if (child.isMesh) {
-            if (child.name == 'Chassis') {
+            if (child.name.includes('SkyBox')) {
+              child.visible = false
+            } else if (child.name == 'Chassis') {
               game.car = {
                 chassis: child,
                 bonnet: [],
@@ -301,6 +424,7 @@ class Game {
               child.visible = false
             }
 
+            //child.castShadow = true;
             child.receiveShadow = receiveShadow
           } else {
             if (child.name.includes('Checkpoint')) {
@@ -310,7 +434,7 @@ class Game {
           }
         })
 
-        game.customiseCar(0, 0, 0, 0, 0)
+        game.customiseCar()
 
         game.assets = object
         game.scene.add(object)
@@ -340,31 +464,22 @@ class Game {
 
   reset() {}
 
-  customiseCar(bonnet = 0, engine = 0, seat = 0, wheel = 0, xtra = 0) {
+  customiseCar() {
+    const bonnet = this.carGUI[0] - 1
+    const engine = this.carGUI[2] - 1
+    const exhaust = this.carGUI[3] - 1
+    const wheel = this.carGUI[4] - 1
+    const aerial = this.carGUI[1] - 1
     this.car.bonnet[bonnet].visible = true
     this.car.engine[engine].visible = true
-    this.car.seat[seat].visible = true
+    this.car.seat[exhaust].visible = true
     this.car.wheel[wheel].visible = true
-    this.car.xtra[xtra].visible = true
+    this.car.xtra[aerial].visible = true
     this.car.selected.bonnet = this.car.bonnet[bonnet]
     this.car.selected.engine = this.car.engine[engine]
-    this.car.selected.seat = this.car.seat[seat]
+    this.car.selected.seat = this.car.seat[exhaust]
     this.car.selected.wheel = this.car.wheel[wheel]
-    this.car.selected.xtra = this.car.xtra[xtra]
-  }
-
-  startMessages() {
-    this.sfx.click.play()
-    if (this.messages.index < this.messages.text.length - 1) {
-      this.showMessage(
-        this.messages.text[this.messages.index],
-        25,
-        this.startMessages
-      )
-    } else {
-      this.showMessage(this.messages.text[this.messages.index], 25)
-    }
-    this.messages.index++
+    this.car.selected.xtra = this.car.xtra[aerial]
   }
 
   updatePhysics() {
@@ -399,6 +514,7 @@ class Game {
     // We must add the contact materials to the world
     world.addContactMaterial(wheelGroundContactMaterial)
 
+    //const chassisShape = this.createCannonConvex(this.proxies.car.geometry);
     const chassisShape = new CANNON.Box(new CANNON.Vec3(1, 0.3, 2))
     const chassisBody = new CANNON.Body({ mass: mass })
     const pos = this.car.chassis.position.clone()
@@ -456,6 +572,8 @@ class Game {
     const wheelBodies = []
     let index = 0
     const wheels = [this.car.selected.wheel]
+    this.car.selected.wheel.children[0].visible = true
+    this.car.selected.wheel.children[0].castShadow = true
     for (let i = 0; i < 3; i++) {
       let wheel = this.car.selected.wheel.clone()
       this.scene.add(wheel)
@@ -491,10 +609,17 @@ class Game {
 
     this.vehicle = vehicle
 
+    /*const mainProxy = this.createCannonTrimesh(this.proxies.main.geometry);
+		const mainBody = new CANNON.Body({mass:0});
+		mainBody.position.copy(this.proxies.main.position);
+		mainBody.quaternion.copy(this.proxies.main.quaternion);
+		mainBody.addShape(mainProxy);
+		world.add(mainBody);*/
+
     this.createColliders()
 
     if (this.debugPhysics)
-      this.debugRenderer = new CannonDebugRenderer(this.scene, this.world)
+      this.debugRenderer = new THREE.CannonDebugRenderer(this.scene, this.world)
   }
 
   createColliders() {
@@ -525,6 +650,8 @@ class Game {
   }
 
   updateDrive(forward = this.js.forward, turn = this.js.turn) {
+    this.sfx.engine.volume = Math.abs(forward) * 0.1
+
     const maxSteerVal = 0.6
     const maxForce = 500
     const brakeForce = 10
@@ -570,7 +697,6 @@ class Game {
         this.followCam.getWorldPosition(new THREE.Vector3()),
         0.05
       )
-      if (this.camera.position.y < 1) this.camera.position.y = 1
       this.camera.lookAt(pos)
     }
 
@@ -902,7 +1028,7 @@ class Preloader {
       barBase.style.height = '15px'
       this.domElement.appendChild(barBase)
       const bar = document.createElement('div')
-      bar.style.background = '#2a2'
+      bar.style.background = '#22a'
       bar.style.width = '50%'
       bar.style.borderRadius = '10px'
       bar.style.height = '100%'
@@ -982,18 +1108,70 @@ class Preloader {
   }
 }
 
-const img = document.createElement('img')
-img.src = '/logo.png'
-const div = document.createElement('div')
-div.id = 'logo'
-div.appendChild(img)
-document.body.appendChild(div)
-const i = document.createElement('i')
-i.className = 'fas fa-car'
-const button = document.createElement('button')
-button.id = 'reset-btn'
-button.appendChild(i)
-document.body.appendChild(button)
+const logoImg = document.createElement('img')
+logoImg.src = '/logo.png'
+const logo = document.createElement('div')
+logo.id = 'logo'
+logo.appendChild(logoImg)
+document.body.appendChild(logo)
+
+const button1 = document.createElement('button')
+button1.innerHTML = 'Body'
+const button2 = document.createElement('button')
+button2.innerHTML = 'Aerial'
+const button3 = document.createElement('button')
+button3.innerHTML = 'Engine'
+const button4 = document.createElement('button')
+button4.innerHTML = 'Exhaust'
+const button5 = document.createElement('button')
+button5.innerHTML = 'Wheels'
+const partSelect = document.createElement('div')
+partSelect.id = 'part-select'
+partSelect.appendChild(button1)
+partSelect.appendChild(button2)
+partSelect.appendChild(button3)
+partSelect.appendChild(button4)
+partSelect.appendChild(button5)
+document.body.appendChild(partSelect)
+
+const img1 = document.createElement('img')
+img1.src = '/carparts0001.png'
+const img2 = document.createElement('img')
+img2.src = '/carparts0000.png'
+const img3 = document.createElement('img')
+img3.src = '/carparts0000.png'
+const img4 = document.createElement('img')
+img4.src = '/carparts0000.png'
+const img5 = document.createElement('img')
+img5.src = '/carparts0000.png'
+const img6 = document.createElement('img')
+img6.src = '/carparts0000.png'
+const carParts = document.createElement('div')
+carParts.id = 'car-parts'
+carParts.appendChild(img1)
+carParts.appendChild(img2)
+carParts.appendChild(img3)
+carParts.appendChild(img4)
+carParts.appendChild(img5)
+carParts.appendChild(img6)
+document.body.appendChild(carParts)
+
+const message = document.createElement('div')
+message.id = 'message'
+message.innerHTML = 'Press the buttons above to customise your car.'
+document.body.appendChild(message)
+
+const playButton = document.createElement('button')
+playButton.id = 'play-btn'
+playButton.innerHTML = 'PLAY'
+document.body.appendChild(playButton)
+
+const resetI = document.createElement('i')
+resetI.className = 'fas fa-car'
+const resetButton = document.createElement('button')
+resetButton.id = 'reset-btn'
+resetButton.appendChild(resetI)
+document.body.appendChild(resetButton)
 
 const game = new Game()
 window.game = game
