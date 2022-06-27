@@ -400,10 +400,3 @@ document.body.appendChild(div)
 
 const game = new Game()
 window.game = game
-
-{
-  /* <div id="gui">
-			<button>Add Sphere</button>
-			<button>Add Box</button>
-		</div> */
-}
